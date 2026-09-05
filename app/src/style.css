@@ -316,4 +316,99 @@ button.icon {
 
 #splash .actions {
   margin-top: 14px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Sync badge in the header: a coloured dot, tapping it opens the settings sheet. */
+.dot::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dot[data-state="idle"]::before {
+  background: #3f9e63;
+}
+
+.dot[data-state="pending"]::before {
+  background: #d79a2b;
+}
+
+.dot[data-state="syncing"]::before {
+  background: #4b8fd4;
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+.dot[data-state="error"]::before {
+  background: #cc4b45;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Pattern browser previews: one pixel per cell, blown up without smoothing. */
+.thumb {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+
+.settings .status {
+  margin: 0;
+  padding: 10px 14px;
+  font-weight: 600;
+}
+
+.settings .status[data-state="error"] {
+  color: #cc4b45;
+}
+
+.settings h3 {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.settings .note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  min-height: 1.4em;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field input {
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
 }

@@ -1,14 +1,11 @@
 import { db } from './db';
 import type { StoredProgress } from '../types';
-import { debounce } from '../util';
+import { bytesEqual, countBits, debounce } from '../util';
 
 const UNDO_LIMIT = 200;
 
 /** One gesture, not one cell — a swipe undoes as a single step. */
 type Op = { indices: Int32Array; value: boolean };
-
-const POPCOUNT = new Uint8Array(256);
-for (let i = 1; i < 256; i++) POPCOUNT[i] = POPCOUNT[i >> 1] + (i & 1);
 
 export class Progress {
   readonly patternId: string;
@@ -34,7 +31,7 @@ export class Progress {
     this.base = stored?.base?.length === bytes ? new Uint8Array(stored.base) : new Uint8Array(bytes);
     this.version = stored?.version ?? 0;
     this.dirty = stored?.dirty ?? false;
-    for (const b of this.bits) this.done += POPCOUNT[b];
+    this.done = countBits(this.bits);
   }
 
   static async load(patternId: string, size: number): Promise<Progress> {
@@ -98,11 +95,23 @@ export class Progress {
   /** Replaces the whole mask (import, or a merge from the server) and clears history. */
   replace(bits: Uint8Array): void {
     this.bits = new Uint8Array(bits);
-    this.done = 0;
-    for (const b of this.bits) this.done += POPCOUNT[b];
+    this.done = countBits(this.bits);
     this.undoStack.length = 0;
     this.redoStack.length = 0;
     this.changed();
+  }
+
+  /**
+   * Records what the server now holds. `confirmed` is the mask that was actually
+   * accepted, which may already be behind `bits` if the user kept stitching while
+   * the request was in flight — hence the comparison rather than `dirty = false`.
+   */
+  markSynced(version: number, confirmed: Uint8Array): void {
+    this.version = version;
+    this.base = new Uint8Array(confirmed);
+    this.dirty = !bytesEqual(this.bits, confirmed);
+    for (const fn of this.listeners) fn();
+    this.save();
   }
 
   snapshot(): StoredProgress {

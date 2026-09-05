@@ -3,13 +3,17 @@ import './style.css';
 import { Renderer } from './render/renderer';
 import { currentTheme, onThemeChange } from './render/theme';
 import { requestPersistence } from './state/db';
-import { importPatternFile, listPatterns, loadPattern } from './state/pattern';
+import { listPatterns, loadPattern } from './state/pattern';
 import { Progress } from './state/progress';
+import { LABELS, Sync } from './sync/sync';
 import type { Pattern, PatternSummary } from './types';
 import { EMPTY } from './types';
 import { attachInteraction, type Mode } from './ui/interaction';
 import { paletteList, renderChips } from './ui/palette';
+import { openPatternList } from './ui/patterns';
+import { openSettings } from './ui/settings';
 import { closeSheet, openSheet, sheetIsOpen } from './ui/sheet';
+import { keepScreenAwake } from './ui/wakelock';
 
 const LAST_PATTERN = 'cross-stitch:last-pattern';
 
@@ -22,6 +26,7 @@ const nameEl = document.getElementById('pattern-name') as HTMLSpanElement;
 const statsEl = document.getElementById('pattern-stats') as HTMLSpanElement;
 const undoBtn = document.getElementById('undo') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo') as HTMLButtonElement;
+const syncBtn = document.getElementById('sync-status') as HTMLButtonElement;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>('.modes button')];
 
 type Session = {
@@ -30,6 +35,7 @@ type Session = {
   renderer: Renderer;
 };
 
+const sync = new Sync();
 let session: Session | null = null;
 let mode: Mode = 'view';
 let selected: number | null = null;
@@ -59,6 +65,12 @@ function updateStats(): void {
     `${nf.format(progress.done)} из ${nf.format(pattern.stitchCount)}`;
   undoBtn.disabled = !progress.canUndo;
   redoBtn.disabled = !progress.canRedo;
+}
+
+function updateSyncBadge(): void {
+  syncBtn.dataset.state = sync.state;
+  syncBtn.title = sync.message ? `${LABELS[sync.state]}: ${sync.message}` : LABELS[sync.state];
+  syncBtn.setAttribute('aria-label', syncBtn.title);
 }
 
 function selectColour(index: number | null): void {
@@ -98,6 +110,9 @@ async function openPattern(id: string): Promise<void> {
   progress.onChange(() => {
     renderer.invalidate();
     updateStats();
+    // Only real edits are worth a push; markSynced also notifies, and pushing in
+    // response to a confirmation would just loop.
+    if (progress.dirty) sync.schedule();
   });
 
   // Direction is fixed by the first stitched cell the gesture touches, so one
@@ -134,62 +149,15 @@ async function openPattern(id: string): Promise<void> {
   renderChips(chips, pattern, null, selectColour);
   updateStats();
   localStorage.setItem(LAST_PATTERN, pattern.id);
+  sync.attach(pattern, progress);
 }
 
-function pickFile(): Promise<File | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json,application/json';
-    input.onchange = () => resolve(input.files?.[0] ?? null);
-    input.click();
+function showPatterns(): void {
+  void openPatternList({
+    currentId: session?.pattern.id ?? null,
+    onOpen: (id) => openPattern(id),
+    onError: (message) => alert(message),
   });
-}
-
-async function importPattern(): Promise<void> {
-  const file = await pickFile();
-  if (!file) return;
-  try {
-    const pattern = await importPatternFile(file);
-    closeSheet();
-    await openPattern(pattern.id);
-  } catch (err) {
-    alert(`Не удалось открыть файл: ${err instanceof Error ? err.message : err}`);
-  }
-}
-
-async function showPatternList(): Promise<void> {
-  const patterns = await listPatterns();
-  const box = document.createElement('div');
-
-  for (const p of patterns) {
-    const row = document.createElement('button');
-    row.className = 'row' + (p.id === session?.pattern.id ? ' selected' : '');
-    const grow = document.createElement('span');
-    grow.className = 'grow';
-    const title = document.createElement('b');
-    title.textContent = p.name;
-    const meta = document.createElement('span');
-    meta.className = 'count';
-    meta.textContent = `${p.width} × ${p.height} · ${nf.format(p.stitchCount)} крестиков`;
-    grow.append(title, meta);
-    row.append(grow);
-    row.onclick = async () => {
-      closeSheet();
-      await openPattern(p.id);
-    };
-    box.append(row);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'sheet-actions';
-  const add = document.createElement('button');
-  add.textContent = 'Открыть схему (.json)';
-  add.onclick = () => void importPattern();
-  actions.append(add);
-  box.append(actions);
-
-  openSheet('Схемы', box);
 }
 
 function showPalette(): void {
@@ -197,13 +165,19 @@ function showPalette(): void {
   openSheet('Цвета', paletteList(session.pattern, selected, selectColour));
 }
 
-document.getElementById('open-patterns')?.addEventListener('click', () => void showPatternList());
+document.getElementById('open-patterns')?.addEventListener('click', showPatterns);
 document.getElementById('open-palette')?.addEventListener('click', showPalette);
 document.getElementById('fit')?.addEventListener('click', () => {
   if (!session) return;
   session.renderer.viewport.fit();
   session.renderer.requestDraw();
 });
+function showSettings(): void {
+  // Restoring a backup replaces the charts under our feet, so start over from the list.
+  openSettings(sync, () => void openInitial());
+}
+
+syncBtn.addEventListener('click', showSettings);
 undoBtn.addEventListener('click', () => session?.progress.undo());
 redoBtn.addEventListener('click', () => session?.progress.redo());
 for (const b of modeButtons) {
@@ -217,18 +191,20 @@ window.addEventListener('resize', () => {
 });
 
 onThemeChange(() => session?.renderer.setTheme(currentTheme()));
+sync.onChange(updateSyncBadge);
+updateSyncBadge();
 
-// Anything unsaved must reach IndexedDB before the tab is frozen or killed.
+// Anything unsaved must reach IndexedDB before the tab is frozen or killed, and
+// the moment the app is put away is the best chance to get it off the device too.
 for (const event of ['visibilitychange', 'pagehide'] as const) {
   window.addEventListener(event, () => {
     if (event === 'visibilitychange' && document.visibilityState === 'visible') return;
-    void session?.progress.flush();
+    void session?.progress.flush().then(() => sync.run());
   });
 }
 
-async function start(): Promise<void> {
-  void requestPersistence();
-
+/** Picks up where the app was left, or explains why it cannot. */
+async function openInitial(): Promise<void> {
   let patterns: PatternSummary[] = [];
   try {
     patterns = await listPatterns();
@@ -240,12 +216,10 @@ async function start(): Promise<void> {
   const id = patterns.find((p) => p.id === wanted)?.id ?? patterns[0]?.id;
 
   if (!id) {
-    const button = document.createElement('button');
-    button.textContent = 'Открыть схему (.json)';
-    button.onclick = () => void importPattern();
     showSplash(
-      'Схем пока нет. Сконвертируйте .xsd через tools/xsd2json.py и откройте получившийся JSON.',
-      button,
+      'Схем пока нет. Откройте файл .xsd — он разберётся прямо здесь, — ' +
+        'или настройте синхронизацию, если схема уже лежит на сервере.',
+      splashButtons(),
     );
     return;
   }
@@ -254,14 +228,31 @@ async function start(): Promise<void> {
     await openPattern(id);
   } catch (err) {
     console.error(err);
-    const retry = document.createElement('button');
-    retry.textContent = 'Открыть схему (.json)';
-    retry.onclick = () => void importPattern();
-    showSplash(`Не удалось открыть схему: ${err instanceof Error ? err.message : err}`, retry);
+    showSplash(
+      `Не удалось открыть схему: ${err instanceof Error ? err.message : err}`,
+      splashButtons(),
+    );
   }
 }
 
-void start();
+/** The header is hidden behind the splash, so its two escape hatches go here. */
+function splashButtons(): Node {
+  const box = document.createDocumentFragment();
+  const open = document.createElement('button');
+  open.textContent = 'Открыть схему';
+  open.onclick = showPatterns;
+  const settings = document.createElement('button');
+  settings.textContent = 'Настройки';
+  settings.onclick = showSettings;
+  box.append(open, settings);
+  return box;
+}
+
+void (async () => {
+  void requestPersistence();
+  keepScreenAwake();
+  await openInitial();
+})();
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {

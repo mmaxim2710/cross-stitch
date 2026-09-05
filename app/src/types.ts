@@ -40,3 +40,6 @@ export type StoredProgress = {
   dirty: boolean;
   updatedAt: number;
 };
+
+/** A pattern as it travels over the wire and to disk: cells as base64. */
+export type RawPattern = Omit<Pattern, 'cells'> & { cells: string };

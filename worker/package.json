@@ -1,0 +1,16 @@
+{
+  "name": "cross-stitch-worker",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "schema": "wrangler d1 execute cross-stitch --remote --file=schema.sql",
+    "schema:local": "wrangler d1 execute cross-stitch --local --file=schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260903.1",
+    "typescript": "^5.6.3",
+    "wrangler": "^4.129.0"
+  }
+}

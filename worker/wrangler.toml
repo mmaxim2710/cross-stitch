@@ -1,0 +1,13 @@
+name = "cross-stitch"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+
+# id получен из `npx wrangler d1 create cross-stitch`; сам по себе он не секрет —
+# доступ к базе даёт только логин в аккаунт Cloudflare.
+[[d1_databases]]
+binding = "DB"
+database_name = "cross-stitch"
+database_id = "19bad2a2-924e-41db-8424-6e7cbb29533f"
+
+# Токен лежит секретом, не здесь: `npx wrangler secret put AUTH_TOKEN`.
+# Для локального `wrangler dev` его кладут в worker/.dev.vars (в .gitignore).

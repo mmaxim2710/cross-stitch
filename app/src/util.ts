@@ -47,3 +47,18 @@ export function contrastText(hex: string): string {
   const [r, g, b] = parseHexColor(hex);
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5 ? '#ffffff' : '#000000';
 }
+
+export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+const POPCOUNT = new Uint8Array(256);
+for (let i = 1; i < 256; i++) POPCOUNT[i] = POPCOUNT[i >> 1] + (i & 1);
+
+export function countBits(bytes: Uint8Array): number {
+  let total = 0;
+  for (const b of bytes) total += POPCOUNT[b];
+  return total;
+}
