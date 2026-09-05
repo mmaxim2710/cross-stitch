@@ -1,0 +1,10 @@
+# Схемы под чужими правами — не публикуем (GitHub Pages всегда публичен)
+data/*.json
+schemas_example/
+
+node_modules/
+dist/
+.wrangler/
+.dev.vars
+
+PLAN.md

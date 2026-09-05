@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f1ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131417" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <title>Вышивка</title>
+  </head>
+  <body>
+    <div id="app" hidden>
+      <header class="bar">
+        <button id="open-patterns" class="icon" title="Схемы" aria-label="Схемы">☰</button>
+        <div class="title">
+          <span id="pattern-name"></span>
+          <span id="pattern-stats" class="muted"></span>
+        </div>
+        <button id="fit" class="icon" title="Вписать" aria-label="Вписать">⤢</button>
+      </header>
+
+      <div class="stage">
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <div class="palette">
+        <div id="chips" class="chips"></div>
+        <button id="open-palette" class="icon" title="Все цвета" aria-label="Все цвета">▾</button>
+      </div>
+
+      <footer class="bar">
+        <div class="modes" role="group" aria-label="Режим">
+          <button data-mode="view" class="active">Просмотр</button>
+          <button data-mode="mark">Отметка</button>
+        </div>
+        <button id="undo" class="icon" title="Отменить" aria-label="Отменить">↶</button>
+        <button id="redo" class="icon" title="Повторить" aria-label="Повторить">↷</button>
+      </footer>
+    </div>
+
+    <div id="sheet" class="sheet" hidden>
+      <div class="sheet-backdrop"></div>
+      <div class="sheet-body">
+        <div class="sheet-head">
+          <h2 id="sheet-title"></h2>
+          <button id="sheet-close" class="icon" aria-label="Закрыть">✕</button>
+        </div>
+        <div id="sheet-content"></div>
+      </div>
+    </div>
+
+    <div id="splash">
+      <p id="splash-text">Загрузка…</p>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
