@@ -2,6 +2,7 @@ import type { Pattern } from '../types';
 import { EMPTY } from '../types';
 import { parseHexColor } from '../util';
 import type { Progress } from '../state/progress';
+import type { Selection } from '../state/selection';
 import { symbolFor } from './symbols';
 import type { Theme } from './theme';
 import { Viewport } from './viewport';
@@ -11,6 +12,8 @@ export const RULER = 22;
 const GRID_MIN_SCALE = 6;
 /** Symbols and check marks only make sense once a cell is big enough to hold one. */
 const SYMBOL_MIN_SCALE = 14;
+/** Below this, outlines merge into a solid blot and hide the colours underneath. */
+const OUTLINE_MIN_SCALE = 3;
 const MUTE = 0.8; // how far unselected colours are pushed towards the muted grey
 
 type RGB = [number, number, number];
@@ -25,6 +28,37 @@ function mix(a: RGB, b: RGB, t: number): RGB {
 
 function luminance([r, g, b]: RGB): number {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+
+type Member = (cx: number, cy: number) => boolean;
+
+/** Adds the sides of one cell that face a non-member neighbour. */
+function border(
+  path: Path2D,
+  cx: number,
+  cy: number,
+  left: number,
+  top: number,
+  right: number,
+  bottom: number,
+  member: Member,
+): void {
+  if (!member(cx, cy - 1)) {
+    path.moveTo(left, top);
+    path.lineTo(right, top);
+  }
+  if (!member(cx, cy + 1)) {
+    path.moveTo(left, bottom);
+    path.lineTo(right, bottom);
+  }
+  if (!member(cx - 1, cy)) {
+    path.moveTo(left, top);
+    path.lineTo(left, bottom);
+  }
+  if (!member(cx + 1, cy)) {
+    path.moveTo(right, top);
+    path.lineTo(right, bottom);
+  }
 }
 
 /**
@@ -48,6 +82,7 @@ export class Renderer {
     private canvas: HTMLCanvasElement,
     private pattern: Pattern,
     private progress: Progress,
+    private selection: Selection,
     private theme: Theme,
   ) {
     const ctx = canvas.getContext('2d');
@@ -107,12 +142,13 @@ export class Renderer {
 
   /** Composited colour of a cell, matching what the pixel cache holds. */
   cellColor(value: number, done: boolean): RGB {
-    const { fabric, mute, doneTint } = this.theme;
+    const { fabric, mute, done: doneColor } = this.theme;
     if (value === EMPTY) return fabric;
-    let rgb = this.colors[value] ?? fabric;
-    if (this.selected !== null && value !== this.selected) rgb = mix(rgb, mute, MUTE);
-    if (done) rgb = mix(rgb, doneTint, 0.55);
-    return rgb;
+    // Finished cells drop their thread colour entirely: the eye should be able to
+    // find what is left without comparing shades of the same colour.
+    if (done) return doneColor;
+    const rgb = this.colors[value] ?? fabric;
+    return this.selected !== null && value !== this.selected ? mix(rgb, mute, MUTE) : rgb;
   }
 
   private rebuild(): void {
@@ -148,6 +184,7 @@ export class Renderer {
     ctx.drawImage(this.cells, vp.x, vp.y, w, h);
 
     this.drawGrid();
+    this.drawOutlines();
     if (vp.scale >= SYMBOL_MIN_SCALE) this.drawSymbols();
     this.drawRulers();
     ctx.restore();
@@ -195,6 +232,67 @@ export class Renderer {
     column(this.pattern.width / 2);
     row(this.pattern.height / 2);
     ctx.stroke();
+  }
+
+  /**
+   * Borders around the cells of the picked colour and around the cells waiting
+   * for a ✓ / ✗. Only the outer edge of a run is drawn — a segment is emitted
+   * where the neighbour is not a member — so a solid area reads as one region
+   * rather than as a grid.
+   */
+  private drawOutlines(): void {
+    const { ctx, viewport: vp, theme, selection } = this;
+    const showPick = selection.count > 0;
+    const showColour = this.selected !== null;
+    if (vp.scale < OUTLINE_MIN_SCALE || (!showPick && !showColour)) return;
+
+    const { x0, y0, x1, y1 } = vp.visibleCells();
+    const { cells, width, height } = this.pattern;
+    const picked = this.selected;
+
+    const inColour = (cx: number, cy: number): boolean =>
+      cx >= 0 && cy >= 0 && cx < width && cy < height && cells[cy * width + cx] === picked;
+    const inPick = (cx: number, cy: number): boolean =>
+      cx >= 0 && cy >= 0 && cx < width && cy < height && selection.has(cy * width + cx);
+
+    const colourEdge = new Path2D();
+    const pickEdge = new Path2D();
+    const pickArea = new Path2D();
+
+    for (let cy = y0; cy < y1; cy++) {
+      const top = Math.round(vp.y + cy * vp.scale);
+      const bottom = Math.round(vp.y + (cy + 1) * vp.scale);
+      for (let cx = x0; cx < x1; cx++) {
+        const colour = showColour && inColour(cx, cy);
+        const pick = showPick && inPick(cx, cy);
+        if (!colour && !pick) continue;
+        const left = Math.round(vp.x + cx * vp.scale);
+        const right = Math.round(vp.x + (cx + 1) * vp.scale);
+        if (colour) border(colourEdge, cx, cy, left, top, right, bottom, inColour);
+        if (pick) {
+          pickArea.rect(left, top, right - left, bottom - top);
+          border(pickEdge, cx, cy, left, top, right, bottom, inPick);
+        }
+      }
+    }
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(RULER, RULER, vp.viewW - RULER, vp.viewH - RULER);
+    ctx.clip();
+    if (showColour) {
+      ctx.strokeStyle = theme.outline;
+      ctx.lineWidth = Math.max(1.5, vp.scale * 0.09);
+      ctx.stroke(colourEdge);
+    }
+    if (showPick) {
+      ctx.fillStyle = theme.pickFill;
+      ctx.fill(pickArea);
+      ctx.strokeStyle = theme.pick;
+      ctx.lineWidth = Math.max(2, vp.scale * 0.14);
+      ctx.stroke(pickEdge);
+    }
+    ctx.restore();
   }
 
   private drawSymbols(): void {

@@ -5,10 +5,12 @@ import { currentTheme, onThemeChange } from './render/theme';
 import { requestPersistence } from './state/db';
 import { listPatterns, loadPattern } from './state/pattern';
 import { Progress } from './state/progress';
+import { Selection } from './state/selection';
 import { LABELS, Sync } from './sync/sync';
 import type { Pattern, PatternSummary } from './types';
 import { EMPTY } from './types';
 import { attachInteraction, type Mode } from './ui/interaction';
+import { unlock } from './ui/lock';
 import { paletteList, renderChips } from './ui/palette';
 import { openPatternList } from './ui/patterns';
 import { openSettings } from './ui/settings';
@@ -27,11 +29,15 @@ const statsEl = document.getElementById('pattern-stats') as HTMLSpanElement;
 const undoBtn = document.getElementById('undo') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo') as HTMLButtonElement;
 const syncBtn = document.getElementById('sync-status') as HTMLButtonElement;
+const pickedBar = document.getElementById('picked') as HTMLDivElement;
+const pickedCount = document.getElementById('picked-count') as HTMLSpanElement;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>('.modes button')];
 
 type Session = {
   pattern: Pattern;
   progress: Progress;
+  /** Cells picked in marking mode, until ✓ or ✗ says what to do with them. */
+  selection: Selection;
   renderer: Renderer;
 };
 
@@ -83,21 +89,51 @@ function selectColour(index: number | null): void {
 function setMode(next: Mode): void {
   mode = next;
   for (const b of modeButtons) b.classList.toggle('active', b.dataset.mode === next);
+  // Leaving marking mode drops the pick: an unconfirmed selection left behind
+  // would come back as a surprise on the next visit to the mode.
+  if (next !== 'mark') clearPicked();
+}
+
+function updatePicked(): void {
+  const count = session?.selection.count ?? 0;
+  pickedBar.hidden = count === 0;
+  pickedCount.textContent = `Выделено: ${nf.format(count)}`;
+  session?.renderer.requestDraw();
+}
+
+function clearPicked(): void {
+  session?.selection.clear();
+  updatePicked();
+}
+
+/** ✓ and ✗: the pick becomes one undoable step, as a swipe used to be. */
+function applyPicked(value: boolean): void {
+  if (!session) return;
+  const { progress, selection, renderer } = session;
+  progress.beginStroke(value);
+  selection.forEach((i) => progress.paint(i));
+  progress.endStroke();
+  selection.clear();
+  updatePicked();
+  renderer.invalidate();
 }
 
 async function openPattern(id: string): Promise<void> {
   await session?.progress.flush();
 
   const pattern = await loadPattern(id);
-  const progress = await Progress.load(pattern.id, pattern.width * pattern.height);
+  const size = pattern.width * pattern.height;
+  const progress = await Progress.load(pattern.id, size);
+  const selection = new Selection(size);
 
   // A fresh canvas per pattern: the old one carries its own gesture listeners.
+  // The confirmation bar lives in the stage too and has to survive the swap.
   const canvas = document.createElement('canvas');
   canvas.id = 'canvas';
-  stage.replaceChildren(canvas);
+  stage.replaceChildren(canvas, pickedBar);
 
-  const renderer = new Renderer(canvas, pattern, progress, currentTheme());
-  session = { pattern, progress, renderer };
+  const renderer = new Renderer(canvas, pattern, progress, selection, currentTheme());
+  session = { pattern, progress, selection, renderer };
   selected = null;
 
   // The canvas has to be on screen before it can be measured, so reveal first.
@@ -115,16 +151,14 @@ async function openPattern(id: string): Promise<void> {
     if (progress.dirty) sync.schedule();
   });
 
-  // Direction is fixed by the first stitched cell the gesture touches, so one
-  // swipe either marks or unmarks throughout.
-  let strokeValue: boolean | null = null;
-  const paint = (index: number): void => {
+  // Marking is picking: a gesture only collects cells, and nothing is written
+  // until the confirmation. Direction is fixed by the first stitched cell the
+  // gesture touches, so one swipe either picks or unpicks throughout.
+  let pickValue: boolean | null = null;
+  const pick = (index: number): void => {
     if (pattern.cells[index] === EMPTY) return;
-    if (strokeValue === null) {
-      strokeValue = !progress.get(index);
-      progress.beginStroke(strokeValue);
-    }
-    progress.paint(index);
+    if (pickValue === null) pickValue = !selection.has(index);
+    selection.set(index, pickValue);
   };
 
   attachInteraction(canvas, renderer.viewport, {
@@ -134,19 +168,24 @@ async function openPattern(id: string): Promise<void> {
       selectColour(value === EMPTY || value === selected ? null : value);
     },
     strokeStart: (index) => {
-      strokeValue = null;
-      paint(index);
+      pickValue = null;
+      pick(index);
+      updatePicked();
     },
-    strokeMove: paint,
+    strokeMove: (index) => {
+      pick(index);
+      updatePicked();
+    },
     strokeEnd: () => {
-      progress.endStroke();
-      strokeValue = null;
+      pickValue = null;
+      updatePicked();
     },
     changed: () => renderer.requestDraw(),
   });
 
   nameEl.textContent = pattern.name;
   renderChips(chips, pattern, null, selectColour);
+  updatePicked();
   updateStats();
   localStorage.setItem(LAST_PATTERN, pattern.id);
   sync.attach(pattern, progress);
@@ -178,6 +217,9 @@ function showSettings(): void {
 }
 
 syncBtn.addEventListener('click', showSettings);
+document.getElementById('picked-clear')?.addEventListener('click', clearPicked);
+document.getElementById('picked-mark')?.addEventListener('click', () => applyPicked(true));
+document.getElementById('picked-unmark')?.addEventListener('click', () => applyPicked(false));
 undoBtn.addEventListener('click', () => session?.progress.undo());
 redoBtn.addEventListener('click', () => session?.progress.redo());
 for (const b of modeButtons) {
@@ -249,6 +291,7 @@ function splashButtons(): Node {
 }
 
 void (async () => {
+  await unlock();
   void requestPersistence();
   keepScreenAwake();
   await openInitial();

@@ -1,6 +1,6 @@
 /* Offline shell. Everything the app needs is static, so cache-first is enough;
    bumping CACHE on deploy drops the previous generation. */
-const CACHE = 'cross-stitch-v1';
+const CACHE = 'cross-stitch-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

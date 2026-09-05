@@ -28,6 +28,12 @@
 
       <div class="stage">
         <canvas id="canvas"></canvas>
+        <div id="picked" class="picked" hidden>
+          <span id="picked-count" class="picked-count"></span>
+          <button id="picked-clear" class="plain">Сбросить</button>
+          <button id="picked-unmark" class="icon danger" title="Снять отметку">✗</button>
+          <button id="picked-mark" class="icon primary" title="Отметить выполненными">✓</button>
+        </div>
       </div>
 
       <div class="palette">
@@ -53,6 +59,27 @@
           <button id="sheet-close" class="icon" aria-label="Закрыть">✕</button>
         </div>
         <div id="sheet-content"></div>
+      </div>
+    </div>
+
+    <div id="lock" hidden>
+      <div class="lock-box">
+        <p id="lock-title">Введите код</p>
+        <div id="lock-dots" class="lock-dots"><i></i><i></i><i></i><i></i></div>
+        <div id="lock-keys" class="lock-keys">
+          <button data-key="1">1</button>
+          <button data-key="2">2</button>
+          <button data-key="3">3</button>
+          <button data-key="4">4</button>
+          <button data-key="5">5</button>
+          <button data-key="6">6</button>
+          <button data-key="7">7</button>
+          <button data-key="8">8</button>
+          <button data-key="9">9</button>
+          <span></span>
+          <button data-key="0">0</button>
+          <button data-key="back" class="plain" aria-label="Стереть">⌫</button>
+        </div>
       </div>
     </div>
 

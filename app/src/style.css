@@ -412,3 +412,137 @@ button.icon {
   border-radius: 10px;
   padding: 10px 12px;
 }
+
+/* Confirmation for a pick: floats over the chart so the canvas is never resized
+   mid-gesture. */
+.picked {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+
+.picked[hidden] {
+  display: none;
+}
+
+.picked-count {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+button.plain {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 8px 6px;
+}
+
+button.primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
+  font-size: 20px;
+}
+
+button.danger {
+  background: #cc4b45;
+  color: #fff;
+  border-color: transparent;
+  font-size: 20px;
+}
+
+/* Code lock. Not real protection — the page is public and the code ships in the
+   bundle — just a door for anyone who finds the address. */
+#lock {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+#lock[hidden] {
+  display: none;
+}
+
+.lock-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+#lock-title {
+  margin: 0;
+  color: var(--muted);
+}
+
+.lock-dots {
+  display: flex;
+  gap: 14px;
+}
+
+.lock-dots i {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+  transition: background 0.12s;
+}
+
+.lock-dots i.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.lock-keys {
+  display: grid;
+  grid-template-columns: repeat(3, 72px);
+  gap: 12px;
+}
+
+.lock-keys button {
+  height: 72px;
+  border-radius: 50%;
+  font-size: 26px;
+  background: var(--surface-2);
+}
+
+.lock-keys button:active {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.lock-keys button.plain {
+  background: none;
+  font-size: 22px;
+}
+
+#lock.wrong .lock-box {
+  animation: shake 0.4s;
+}
+
+@keyframes shake {
+  25% {
+    transform: translateX(-9px);
+  }
+  50% {
+    transform: translateX(9px);
+  }
+  75% {
+    transform: translateX(-5px);
+  }
+}
