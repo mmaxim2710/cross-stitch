@@ -18,11 +18,20 @@ export function renderChips(
   onSelect: Select,
 ): void {
   host.replaceChildren(
-    ...pattern.palette.map((entry) => {
+    ...pattern.palette.map((entry, i) => {
       const chip = document.createElement('button');
       chip.className = 'chip' + (entry.index === selected ? ' selected' : '');
-      chip.title = `${entry.name} — ${entry.count} кл.`;
-      swatchStyle(chip, entry);
+      chip.title = `${i + 1}. ${entry.name} — ${entry.count} кл.`;
+
+      const swatch = document.createElement('span');
+      swatch.className = 'chip-swatch';
+      swatchStyle(swatch, entry);
+
+      const number = document.createElement('span');
+      number.className = 'chip-index';
+      number.textContent = String(i + 1);
+
+      chip.append(swatch, number);
       // Tapping the selected colour again clears the highlight.
       chip.onclick = () => onSelect(entry.index === selected ? null : entry.index);
       return chip;
@@ -34,9 +43,14 @@ export function renderChips(
 /** Full colour list for the bottom sheet. */
 export function paletteList(pattern: Pattern, selected: number | null, onSelect: Select): Node {
   const list = document.createElement('div');
-  for (const entry of pattern.palette) {
+  // The number is the position in the list — the same one written under the chip.
+  for (const [i, entry] of pattern.palette.entries()) {
     const row = document.createElement('button');
     row.className = 'row' + (entry.index === selected ? ' selected' : '');
+
+    const number = document.createElement('span');
+    number.className = 'ordinal';
+    number.textContent = String(i + 1);
 
     const swatch = document.createElement('span');
     swatch.className = 'swatch';
@@ -55,7 +69,7 @@ export function paletteList(pattern: Pattern, selected: number | null, onSelect:
     count.className = 'count';
     count.textContent = String(entry.count);
 
-    row.append(swatch, grow, count);
+    row.append(number, swatch, grow, count);
     row.onclick = () => onSelect(entry.index === selected ? null : entry.index);
     list.append(row);
   }

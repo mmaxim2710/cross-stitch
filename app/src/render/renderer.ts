@@ -15,6 +15,9 @@ const SYMBOL_MIN_SCALE = 14;
 /** Below this, outlines merge into a solid blot and hide the colours underneath. */
 const OUTLINE_MIN_SCALE = 3;
 const MUTE = 0.8; // how far unselected colours are pushed towards the muted grey
+/** How far unfinished colours are pushed towards the muted grey in reveal mode:
+    enough to fall back, not so far that the thread stops being recognisable. */
+const REVEAL_MUTE = 0.5;
 
 type RGB = [number, number, number];
 
@@ -69,6 +72,8 @@ function border(
 export class Renderer {
   readonly viewport: Viewport;
   selected: number | null = null;
+  /** Finished cells in their own colour, the rest washed out: the picture so far. */
+  reveal = false;
 
   private ctx: CanvasRenderingContext2D;
   private cells: HTMLCanvasElement;
@@ -116,6 +121,11 @@ export class Renderer {
     this.invalidate();
   }
 
+  setReveal(on: boolean): void {
+    this.reveal = on;
+    this.invalidate();
+  }
+
   /** The colour cache no longer matches the state; rebuild before the next frame. */
   invalidate(): void {
     this.stale = true;
@@ -144,11 +154,13 @@ export class Renderer {
   cellColor(value: number, done: boolean): RGB {
     const { fabric, mute, done: doneColor } = this.theme;
     if (value === EMPTY) return fabric;
-    // Finished cells drop their thread colour entirely: the eye should be able to
-    // find what is left without comparing shades of the same colour.
-    if (done) return doneColor;
+    // Finished cells normally drop their thread colour entirely: the eye should be
+    // able to find what is left without comparing shades of the same colour. Reveal
+    // mode turns that around — what is stitched becomes the picture and the rest fades.
+    if (done) return this.reveal ? (this.colors[value] ?? fabric) : doneColor;
     const rgb = this.colors[value] ?? fabric;
-    return this.selected !== null && value !== this.selected ? mix(rgb, mute, MUTE) : rgb;
+    if (this.selected !== null && value !== this.selected) return mix(rgb, mute, MUTE);
+    return this.reveal ? mix(rgb, mute, REVEAL_MUTE) : rgb;
   }
 
   private rebuild(): void {
@@ -244,7 +256,10 @@ export class Renderer {
     const { ctx, viewport: vp, theme, selection } = this;
     const showPick = selection.count > 0;
     const showColour = this.selected !== null;
-    if (vp.scale < OUTLINE_MIN_SCALE || (!showPick && !showColour)) return;
+    // Reveal mode outlines what is finished, the same way a picked colour is
+    // outlined: the stitched part gets an edge instead of only a shade.
+    const showDone = this.reveal;
+    if (vp.scale < OUTLINE_MIN_SCALE || (!showPick && !showColour && !showDone)) return;
 
     const { x0, y0, x1, y1 } = vp.visibleCells();
     const { cells, width, height } = this.pattern;
@@ -254,8 +269,16 @@ export class Renderer {
       cx >= 0 && cy >= 0 && cx < width && cy < height && cells[cy * width + cx] === picked;
     const inPick = (cx: number, cy: number): boolean =>
       cx >= 0 && cy >= 0 && cx < width && cy < height && selection.has(cy * width + cx);
+    const inDone = (cx: number, cy: number): boolean =>
+      cx >= 0 &&
+      cy >= 0 &&
+      cx < width &&
+      cy < height &&
+      cells[cy * width + cx] !== EMPTY &&
+      this.progress.get(cy * width + cx);
 
     const colourEdge = new Path2D();
+    const doneEdge = new Path2D();
     const pickEdge = new Path2D();
     const pickArea = new Path2D();
 
@@ -264,11 +287,13 @@ export class Renderer {
       const bottom = Math.round(vp.y + (cy + 1) * vp.scale);
       for (let cx = x0; cx < x1; cx++) {
         const colour = showColour && inColour(cx, cy);
+        const done = showDone && inDone(cx, cy);
         const pick = showPick && inPick(cx, cy);
-        if (!colour && !pick) continue;
+        if (!colour && !done && !pick) continue;
         const left = Math.round(vp.x + cx * vp.scale);
         const right = Math.round(vp.x + (cx + 1) * vp.scale);
         if (colour) border(colourEdge, cx, cy, left, top, right, bottom, inColour);
+        if (done) border(doneEdge, cx, cy, left, top, right, bottom, inDone);
         if (pick) {
           pickArea.rect(left, top, right - left, bottom - top);
           border(pickEdge, cx, cy, left, top, right, bottom, inPick);
@@ -280,6 +305,11 @@ export class Renderer {
     ctx.beginPath();
     ctx.rect(RULER, RULER, vp.viewW - RULER, vp.viewH - RULER);
     ctx.clip();
+    if (showDone) {
+      ctx.strokeStyle = theme.outline;
+      ctx.lineWidth = Math.max(1.5, vp.scale * 0.09);
+      ctx.stroke(doneEdge);
+    }
     if (showColour) {
       ctx.strokeStyle = theme.outline;
       ctx.lineWidth = Math.max(1.5, vp.scale * 0.09);
@@ -322,7 +352,10 @@ export class Renderer {
         const sy = vp.y + (cy + 0.5) * vp.scale;
 
         if (this.progress.get(i)) {
-          ctx.strokeStyle = this.theme.check;
+          // Flat grey done cell or a revealed thread colour alike: follow the cell.
+          ctx.strokeStyle = luminance(this.cellColor(value, true)) < 0.5
+            ? 'rgba(255,255,255,0.7)'
+            : 'rgba(0,0,0,0.55)';
           ctx.beginPath();
           ctx.moveTo(sx - check, sy);
           ctx.lineTo(sx - check * 0.25, sy + check * 0.75);

@@ -13,7 +13,6 @@ export type Theme = {
   axis: string;
   rulerBg: string;
   rulerText: string;
-  check: string;
   /** Outline around the cells of the picked colour. */
   outline: string;
   /** Outline and wash over cells waiting for the ✓ / ✗ confirmation. */
@@ -31,7 +30,6 @@ const LIGHT: Theme = {
   axis: 'rgba(190,40,40,0.75)',
   rulerBg: 'rgba(244,241,234,0.94)',
   rulerText: '#4a4a4a',
-  check: 'rgba(0,0,0,0.5)',
   outline: 'rgba(20,22,26,0.85)',
   pick: '#1560c4',
   pickFill: 'rgba(21,96,196,0.3)',
@@ -47,7 +45,6 @@ const DARK: Theme = {
   axis: 'rgba(255,110,110,0.75)',
   rulerBg: 'rgba(24,26,30,0.94)',
   rulerText: '#a8adb6',
-  check: 'rgba(255,255,255,0.5)',
   outline: 'rgba(240,243,248,0.85)',
   pick: '#6cb4ff',
   pickFill: 'rgba(108,180,255,0.28)',

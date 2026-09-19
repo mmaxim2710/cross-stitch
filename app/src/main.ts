@@ -29,6 +29,7 @@ const statsEl = document.getElementById('pattern-stats') as HTMLSpanElement;
 const undoBtn = document.getElementById('undo') as HTMLButtonElement;
 const redoBtn = document.getElementById('redo') as HTMLButtonElement;
 const syncBtn = document.getElementById('sync-status') as HTMLButtonElement;
+const revealBtn = document.getElementById('reveal') as HTMLButtonElement;
 const pickedBar = document.getElementById('picked') as HTMLDivElement;
 const pickedCount = document.getElementById('picked-count') as HTMLSpanElement;
 const modeButtons = [...document.querySelectorAll<HTMLButtonElement>('.modes button')];
@@ -45,6 +46,8 @@ const sync = new Sync();
 let session: Session | null = null;
 let mode: Mode = 'view';
 let selected: number | null = null;
+/** Finished cells in their own colour, the rest faded — the picture so far. */
+let reveal = false;
 
 const nf = new Intl.NumberFormat('ru-RU');
 
@@ -84,6 +87,13 @@ function selectColour(index: number | null): void {
   session?.renderer.setSelected(index);
   if (session) renderChips(chips, session.pattern, selected, selectColour);
   if (sheetIsOpen()) closeSheet();
+}
+
+function setReveal(on: boolean): void {
+  reveal = on;
+  revealBtn.classList.toggle('on', on);
+  revealBtn.setAttribute('aria-pressed', String(on));
+  session?.renderer.setReveal(on);
 }
 
 function setMode(next: Mode): void {
@@ -141,6 +151,7 @@ async function openPattern(id: string): Promise<void> {
   app.hidden = false;
   renderer.resize();
   renderer.viewport.fit();
+  renderer.setReveal(reveal);
   renderer.invalidate();
 
   progress.onChange(() => {
@@ -217,6 +228,7 @@ function showSettings(): void {
 }
 
 syncBtn.addEventListener('click', showSettings);
+revealBtn.addEventListener('click', () => setReveal(!reveal));
 document.getElementById('picked-clear')?.addEventListener('click', clearPicked);
 document.getElementById('picked-mark')?.addEventListener('click', () => applyPicked(true));
 document.getElementById('picked-unmark')?.addEventListener('click', () => applyPicked(false));
