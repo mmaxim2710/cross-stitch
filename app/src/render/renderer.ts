@@ -3,13 +3,14 @@ import { EMPTY } from '../types';
 import { parseHexColor } from '../util';
 import type { Progress } from '../state/progress';
 import type { Selection } from '../state/selection';
+import type { BoundaryStyle } from '../state/appearance';
 import { symbolFor } from './symbols';
 import type { Theme } from './theme';
 import { Viewport } from './viewport';
 
 export const RULER = 22;
-/** Below this many pixels per cell, grid lines are noise rather than help. */
-const GRID_MIN_SCALE = 6;
+/** Keep section boundaries visible when the whole chart is fitted to a phone. */
+const GRID_MIN_SCALE = 3;
 /** Symbols and check marks only make sense once a cell is big enough to hold one. */
 const SYMBOL_MIN_SCALE = 14;
 /** Below this, outlines merge into a solid blot and hide the colours underneath. */
@@ -74,6 +75,7 @@ export class Renderer {
   selected: number | null = null;
   /** Finished cells in their own colour, the rest washed out: the picture so far. */
   reveal = false;
+  private boundaryStyle: BoundaryStyle = 'sections';
 
   private ctx: CanvasRenderingContext2D;
   private cells: HTMLCanvasElement;
@@ -124,6 +126,11 @@ export class Renderer {
   setReveal(on: boolean): void {
     this.reveal = on;
     this.invalidate();
+  }
+
+  setBoundaryStyle(style: BoundaryStyle): void {
+    this.boundaryStyle = style;
+    this.requestDraw();
   }
 
   /** The colour cache no longer matches the state; rebuild before the next frame. */
@@ -204,12 +211,25 @@ export class Renderer {
 
   private drawGrid(): void {
     const { ctx, viewport: vp, theme } = this;
-    if (vp.scale < GRID_MIN_SCALE) return;
+    const classic = this.boundaryStyle === 'classic';
+    if (vp.scale < (classic ? 6 : GRID_MIN_SCALE)) return;
+    // Older copies of the imported cat are already cached on users' devices.
+    // Resolve its original PDF sectors without requiring a reimport or progress reset.
+    const sections = classic ? [10, 10] : (this.pattern.sectionSize ??
+      (this.pattern.id === 'unidea-black-cat' ? [13, 12] : [10, 10]));
+    const stepX = Number.isInteger(sections[0]) && sections[0] > 0 ? sections[0] : 10;
+    const stepY = Number.isInteger(sections[1]) && sections[1] > 0 ? sections[1] : 10;
     const { x0, y0, x1, y1 } = vp.visibleCells();
     const top = Math.max(vp.y, RULER);
     const bottom = Math.min(vp.y + this.pattern.height * vp.scale, vp.viewH);
     const left = Math.max(vp.x, RULER);
     const right = Math.min(vp.x + this.pattern.width * vp.scale, vp.viewW);
+    if (right <= left || bottom <= top) return;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, top, right - left, bottom - top);
+    ctx.clip();
 
     const column = (cx: number) => {
       const p = Math.round(vp.x + cx * vp.scale) + 0.5;
@@ -226,24 +246,34 @@ export class Renderer {
       ctx.beginPath();
       ctx.strokeStyle = theme.grid;
       ctx.lineWidth = 1;
-      for (let cx = x0; cx <= x1; cx++) if (cx % 10) column(cx);
-      for (let cy = y0; cy <= y1; cy++) if (cy % 10) row(cy);
+      for (let cx = x0; cx <= x1; cx++) if (cx % stepX) column(cx);
+      for (let cy = y0; cy <= y1; cy++) if (cy % stepY) row(cy);
       ctx.stroke();
     }
 
     ctx.beginPath();
-    ctx.strokeStyle = theme.gridMajor;
-    ctx.lineWidth = 1;
-    for (let cx = Math.ceil(x0 / 10) * 10; cx <= x1; cx += 10) column(cx);
-    for (let cy = Math.ceil(y0 / 10) * 10; cy <= y1; cy += 10) row(cy);
+    for (let cx = Math.ceil(x0 / stepX) * stepX; cx <= x1; cx += stepX) column(cx);
+    for (let cy = Math.ceil(y0 / stepY) * stepY; cy <= y1; cy += stepY) row(cy);
+    // A light halo and dark core stay readable on both the black cat and its
+    // pale background, regardless of the device's light/dark theme.
+    if (!classic) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = classic ? theme.gridMajor : 'rgba(0,0,0,0.75)';
+    ctx.lineWidth = classic ? 1 : 1.5;
     ctx.stroke();
 
-    ctx.beginPath();
-    ctx.strokeStyle = theme.axis;
-    ctx.lineWidth = 2;
-    column(this.pattern.width / 2);
-    row(this.pattern.height / 2);
-    ctx.stroke();
+    if (stepX === 10 && stepY === 10) {
+      ctx.beginPath();
+      ctx.strokeStyle = theme.axis;
+      ctx.lineWidth = 2;
+      column(this.pattern.width / 2);
+      row(this.pattern.height / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /**

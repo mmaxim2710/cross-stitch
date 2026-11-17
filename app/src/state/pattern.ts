@@ -17,6 +17,7 @@ export function decodePattern(raw: RawPattern): Pattern {
     width: raw.width,
     height: raw.height,
     stitchesPerInch: raw.stitchesPerInch ?? [14, 14],
+    sectionSize: raw.sectionSize,
     stitchCount: raw.stitchCount ?? 0,
     palette: raw.palette ?? [],
     cells,

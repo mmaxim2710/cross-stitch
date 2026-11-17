@@ -446,7 +446,8 @@ button.icon {
   color: var(--muted);
 }
 
-.field input {
+.field input,
+.field select {
   font: inherit;
   font-size: 15px;
   color: var(--text);

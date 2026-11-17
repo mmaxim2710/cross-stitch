@@ -16,6 +16,8 @@ export type Pattern = {
   width: number;
   height: number;
   stitchesPerInch: [number, number];
+  /** Width and height of a section in cells; defaults to the usual 10 x 10 grid. */
+  sectionSize?: [number, number];
   stitchCount: number;
   palette: PaletteEntry[];
   /** width * height bytes, one palette index per cell, EMPTY where there is no stitch. */

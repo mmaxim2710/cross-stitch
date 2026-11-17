@@ -1,4 +1,5 @@
 import { buildBackup, downloadBackup, restoreBackup } from '../state/backup';
+import { loadBoundaryStyle, saveBoundaryStyle } from '../state/appearance';
 import { Api, loadSettings, saveSettings } from '../sync/api';
 import { LABELS, type Sync } from '../sync/sync';
 import { pickFile } from './files';
@@ -29,9 +30,26 @@ function labelled(text: string, control: HTMLElement): HTMLElement {
  * Server address, token, sync state and the manual backup — everything that is
  * set once and then forgotten.
  */
-export function openSettings(sync: Sync, onRestored: () => void): void {
+export function openSettings(sync: Sync, onRestored: () => void, onAppearanceChanged: () => void): void {
   const box = document.createElement('div');
   box.className = 'settings';
+
+  const appearance = document.createElement('div');
+  appearance.className = 'sheet-actions';
+  const appearanceHeading = document.createElement('h3');
+  appearanceHeading.textContent = 'Вид холста';
+  const boundaries = document.createElement('select');
+  boundaries.setAttribute('aria-label', 'Границы секций');
+  boundaries.append(
+    new Option('Старые — тонкая сетка 10 × 10', 'classic'),
+    new Option('Новые — жирные границы секций', 'sections'),
+  );
+  boundaries.value = loadBoundaryStyle();
+  boundaries.onchange = () => {
+    saveBoundaryStyle(boundaries.value === 'classic' ? 'classic' : 'sections');
+    onAppearanceChanged();
+  };
+  appearance.append(appearanceHeading, labelled('Границы секций', boundaries));
 
   const status = document.createElement('p');
   status.className = 'status';
@@ -133,6 +151,6 @@ export function openSettings(sync: Sync, onRestored: () => void): void {
   backup.className = 'sheet-actions';
   backup.append(heading, exportBtn, importBtn);
 
-  box.append(status, server, backup);
+  box.append(appearance, status, server, backup);
   openSheet('Настройки', box, unsubscribe);
 }

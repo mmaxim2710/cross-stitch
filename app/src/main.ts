@@ -3,6 +3,7 @@ import './style.css';
 import { Renderer } from './render/renderer';
 import { currentTheme, onThemeChange } from './render/theme';
 import { requestPersistence } from './state/db';
+import { loadBoundaryStyle } from './state/appearance';
 import { listPatterns, loadPattern } from './state/pattern';
 import { Progress } from './state/progress';
 import { Selection } from './state/selection';
@@ -152,6 +153,7 @@ async function openPattern(id: string): Promise<void> {
   renderer.resize();
   renderer.viewport.fit();
   renderer.setReveal(reveal);
+  renderer.setBoundaryStyle(loadBoundaryStyle());
   renderer.invalidate();
 
   progress.onChange(() => {
@@ -224,7 +226,9 @@ document.getElementById('fit')?.addEventListener('click', () => {
 });
 function showSettings(): void {
   // Restoring a backup replaces the charts under our feet, so start over from the list.
-  openSettings(sync, () => void openInitial());
+  openSettings(sync, () => void openInitial(), () => {
+    session?.renderer.setBoundaryStyle(loadBoundaryStyle());
+  });
 }
 
 syncBtn.addEventListener('click', showSettings);
